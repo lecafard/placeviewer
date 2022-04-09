@@ -1,4 +1,5 @@
 mod commands;
+mod models;
 
 use clap::Parser;
 
@@ -16,6 +17,7 @@ struct Args {
 
 
 fn main() {
-    let args = Args::parse();
-    run_command(args.command);
+  env_logger::init();
+  let args = Args::parse();
+  run_command(args.command);
 }
