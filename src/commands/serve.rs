@@ -1,20 +1,20 @@
+use actix_web::{get, post, App, HttpServer, HttpResponse, Responder};
 use clap::Parser;
 use log::{info};
-use memmap::MmapOptions;
-use serde::Deserialize;
-use std::{mem, ptr, slice};
+use std::collections::HashMap;
 use std::fs::{File, read_to_string};
 use std::io::BufWriter;
 use std::time::Instant;
-use yaml_rust::YamlLoader;
+use tokio::runtime::Runtime;
 
-use crate::models::{Header, Placement};
+use crate::store::config;
+use crate::store::Dataset;
 
 #[derive(Parser)]
 pub struct ServeCommand {
   // Port to listen on
   #[clap(long, default_value_t = 3000)]
-  port: i16,
+  port: u16,
   
   // Host to listen on
   #[clap(long, default_value = "localhost")]
@@ -25,67 +25,69 @@ pub struct ServeCommand {
   config_file: String
 }
 
-#[derive(Debug, Deserialize)]
-struct Config {
-  datasets: Vec<Dataset>,
-}
-
-#[derive(Debug, Deserialize)]
-struct Dataset {
-  name: String,
-  tiles: Vec<String>,
-  palette: Vec<u32>,
-  size_x: u16,
-  size_y: u16,
-  size_tile: u16,
-  interval: u32
-}
-
 impl ServeCommand {
   pub fn execute(&self) {
     let config_str = read_to_string(&self.config_file).unwrap();
-    let config: Config = serde_yaml::from_str(&config_str).unwrap();
-    info!("{:?}", config);
-    for dataset in config.datasets.iter() {
-      let palette: Vec<u8> = dataset.palette.clone().into_iter()
-        .flat_map(|v| {
-          [
-            (v >> 16 & 0xff) as u8,
-            (v >>  8 & 0xff) as u8,
-            (v       & 0xff) as u8
-          ]
-         })
-        .collect();
-
-      for (i, filename) in dataset.tiles.iter().enumerate() {
-        let file = File::open(filename).unwrap();
-        let mmap = unsafe { MmapOptions::new().map(&file).unwrap() };
-        let header: Header = unsafe { ptr::read(mmap.as_ptr() as *const _) };
-        info!("Header: {:?}", header);
-        let placements: &[Placement] = unsafe {
-          slice::from_raw_parts(
-            mmap.as_ptr().offset(mem::size_of::<Header>() as isize) as *const _,
-            header.count as usize
-          )
-        };
-
-        let now = Instant::now();
-        let mut data: Vec<u8> = vec![0; header.size as usize * header.size as usize];
-        for p in placements.iter() {
-          let i = p.x as usize + (p.y as usize * header.size as usize);
-          data[i] = p.color;
-        }
-
-        println!("Frame took {:?} seconds to render", now.elapsed());
-
-        let file = File::create(format!("{}_{}.png", dataset.name, i)).unwrap();
-        let w = BufWriter::new(file);
-        let mut encoder = png::Encoder::new(w, header.size as u32, header.size as u32);
-        encoder.set_color(png::ColorType::Indexed);
-        encoder.set_palette(&palette);
-        let mut writer = encoder.write_header().unwrap();
-        writer.write_image_data(&data).unwrap();
+    let config: config::Root = serde_yaml::from_str(&config_str).unwrap();
+    let mut datasets: HashMap<String, Dataset> = HashMap::new();
+    
+    for serialized_dataset in config.datasets.iter() {
+      if datasets.contains_key(&serialized_dataset.name) {
+        panic!("Dataset {} already exists in map", serialized_dataset.name);
       }
+      let dataset: Dataset = serialized_dataset.load();
+      generate_images(&dataset);
+
+      // datasets.insert(serialized_dataset.name.clone(), dataset);
     }
+
+    // create http server
+    let rt = Runtime::new().unwrap();
+    rt.block_on(server(&self.host, self.port))
+      .unwrap();
+  }
+}
+
+#[get("/")]
+async fn hello() -> impl Responder {
+  HttpResponse::Ok().body("Hello world!")
+}
+#[post("/echo")]
+async fn echo(req_body: String) -> impl Responder {
+    HttpResponse::Ok().body(req_body)
+}
+
+
+async fn server(host: &str, port: u16) -> std::io::Result<()> {
+  info!("Starting server on {}:{}", host, port);
+  HttpServer::new(|| {
+      App::new()
+          .service(hello)
+          .service(echo)
+  })
+  .bind((host, port))?
+  .run()
+  .await
+}
+
+fn generate_images(dataset: &Dataset) {
+  for (i, tile) in dataset.tiles.iter().enumerate() {
+
+    let now = Instant::now();
+    let mut data: Vec<u8> = vec![0; tile.size as usize * tile.size as usize];
+    for p in tile.placements().iter() {
+      let i = p.x as usize + (p.y as usize * dataset.size_tile as usize);
+      data[i] = p.color;
+    }
+
+    println!("Frame took {:?} seconds to render", now.elapsed());
+
+    let file = File::create(format!("data/pics/{}_{}.png", dataset.name, i)).unwrap();
+    let w = BufWriter::new(file);
+    let mut encoder = png::Encoder::new(w, dataset.size_tile as u32, dataset.size_tile as u32);
+    encoder.set_color(png::ColorType::Indexed);
+    encoder.set_palette(&dataset.palette);
+    let mut writer = encoder.write_header().unwrap();
+    writer.write_image_data(&data).unwrap();
   }
 }

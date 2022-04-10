@@ -2,12 +2,10 @@ use clap::Parser;
 use log::{error, info, warn};
 use serde::Deserialize;
 use std::{mem, slice};
-use std::error::Error;
 use std::io::{self, BufWriter, Write};
-use std::path::Path;
 use std::fs::File;
 
-use crate::models::{Header, Placement, Record, Tile};
+use crate::models::record::{TileHeader, Placement, Record};
 
 #[derive(Parser)]
 pub struct ParseCommand {
@@ -57,25 +55,27 @@ fn read_csv(
   size_y: u16,
   size_tile: u16
 ) -> Result<(), ()> {
-  info!("{}", mem::size_of::<Header>());
+  info!("{}", mem::size_of::<TileHeader>());
   if size_x == 0 || size_y == 0 || size_x % size_tile != 0 || size_y % size_tile != 0 {
     error!("The size of the canvas must be divisible by the tile size");
     return Err(())
   }
   let tiles_x = size_x / size_tile;
   let tiles_y = size_y / size_tile;
-  let mut tiles: Vec<Tile> = Vec::with_capacity((tiles_x * tiles_y) as usize);
+  let mut tiles: Vec<TileHeader> = Vec::with_capacity((tiles_x * tiles_y) as usize);
+  let mut placements: Vec<Vec<Placement>> = Vec::with_capacity((tiles_x * tiles_y) as usize);
 
   for ty in 0..tiles_y {
     for tx in 0..tiles_x {
-      tiles.push(Tile{
+      tiles.push(TileHeader{
         size: size_tile,
-        placements: Vec::with_capacity(10000),
         start_x: tx * size_tile,
         start_y: ty * size_tile,
         start: 0,
-        count: 0
-      })
+        count: 0,
+        version: 0x6969,
+      });
+      placements.push(Vec::with_capacity(10000));
     }
   }
 
@@ -127,7 +127,7 @@ fn read_csv(
             color: record.color,
             isblk: true,
           };
-          tiles[(tile_y * tiles_x + tile_x) as usize].placements.push(placement);
+          placements[(tile_y * tiles_x + tile_x) as usize].push(placement);
         }
       }
     } else {
@@ -145,7 +145,7 @@ fn read_csv(
         color: record.color,
         isblk: false,
       };
-      tiles[(tile_y * tiles_x + tile_x) as usize].placements.push(placement);
+      placements[(tile_y * tiles_x + tile_x) as usize].push(placement);
     }
     count += 1;
   }
@@ -153,11 +153,11 @@ fn read_csv(
   for ty in 0..tiles_y {
     for tx in 0..tiles_x {
       let idx = (tx + ty * tiles_x) as usize;
-      tiles[idx].finalize();
+      tiles[idx].count = placements[idx].len() as u32;
       let filename = format!("{}_log_{}_{}.bin", output_prefix, tx, ty);
       let fw = File::create(filename).unwrap();
       let mut w = BufWriter::new(fw);
-      write_record(&Header{
+      write_record(&TileHeader{
         count: tiles[idx].count,
         start: tiles[idx].start,
         size: tiles[idx].size,
@@ -165,7 +165,7 @@ fn read_csv(
         start_y: tiles[idx].start_y,
         version: 0x6969,
       }, &mut w).unwrap();
-      for p in tiles[idx].placements.iter() {
+      for p in placements[idx].iter() {
         write_record(p, &mut w).unwrap();
       }
     }

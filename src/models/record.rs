@@ -11,7 +11,7 @@ pub struct Placement {
 }
 
 #[derive(Debug)]
-pub struct Header {
+pub struct TileHeader {
   pub version: u16,
   pub size: u16,
   pub start_x: u16,
@@ -21,5 +21,5 @@ pub struct Header {
 }
 
 impl Record for Placement {}
-impl Record for Header {}
+impl Record for TileHeader {}
 
