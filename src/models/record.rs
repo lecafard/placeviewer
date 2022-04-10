@@ -12,10 +12,12 @@ pub struct Placement {
 
 #[derive(Debug)]
 pub struct Header {
+  pub version: u16,
+  pub size: u16,
+  pub start_x: u16,
+  pub start_y: u16,
   pub start: u64,
   pub count: u32,
-  pub size: u16,
-  pub version: u16,
 }
 
 impl Record for Placement {}

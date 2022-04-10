@@ -3,12 +3,14 @@ name = "placeviewer"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 csv = "1.1"
 clap = { version = "3.1", features = ["derive"] }
 env_logger = "0.9"
 log = { version = "0.4", features = ["max_level_debug", "release_max_level_info"] }
 memmap = "0.7"
+png = "0.17"
 serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.8"
+tokio = "1.17"
+yaml-rust = "0.4"

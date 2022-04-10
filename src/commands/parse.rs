@@ -12,23 +12,23 @@ use crate::models::{Header, Placement, Record, Tile};
 #[derive(Parser)]
 pub struct ParseCommand {
     // Input CSV
-    #[clap(required(true))]
+    #[clap(required=true)]
     input: String,
 
     // Output Prefix
-    #[clap(required(true))]
+    #[clap(required=true)]
     output_prefix: String,
 
     // X Size of full canvas
-    #[clap(required(true))]
+    #[clap(required=true)]
     size_x: u16,
 
     // Y Size of full canvas
-    #[clap(required(true))]
+    #[clap(required=true)]
     size_y: u16,
     
     // Tile size, tiles are square
-    #[clap(required(true))]
+    #[clap(required=true)]
     size_tile: u16,
 }
 
@@ -57,6 +57,7 @@ fn read_csv(
   size_y: u16,
   size_tile: u16
 ) -> Result<(), ()> {
+  info!("{}", mem::size_of::<Header>());
   if size_x == 0 || size_y == 0 || size_x % size_tile != 0 || size_y % size_tile != 0 {
     error!("The size of the canvas must be divisible by the tile size");
     return Err(())
@@ -67,12 +68,11 @@ fn read_csv(
 
   for ty in 0..tiles_y {
     for tx in 0..tiles_x {
-      let idx = (tx + ty * tiles_x) as usize;
       tiles.push(Tile{
         size: size_tile,
         placements: Vec::with_capacity(10000),
-        start_x: tiles_x * size_tile,
-        start_y: tiles_y * size_tile,
+        start_x: tx * size_tile,
+        start_y: ty * size_tile,
         start: 0,
         count: 0
       })
@@ -122,8 +122,8 @@ fn read_csv(
           let placement = Placement {
             ts: ts,
             uid: record.user_id,
-            x: x,
-            y: y,
+            x: x - tile_x * size_tile,
+            y: y - tile_y * size_tile,
             color: record.color,
             isblk: true,
           };
@@ -140,8 +140,8 @@ fn read_csv(
       let placement = Placement {
         ts: ts,
         uid: record.user_id,
-        x: record.x_coordinate,
-        y: record.y_coordinate,
+        x: record.x_coordinate - tile_x * size_tile,
+        y: record.y_coordinate - tile_y * size_tile,
         color: record.color,
         isblk: false,
       };
@@ -154,13 +154,15 @@ fn read_csv(
     for tx in 0..tiles_x {
       let idx = (tx + ty * tiles_x) as usize;
       tiles[idx].finalize();
-      let filename = format!("{}_tile_{}_{}.bin", output_prefix, tx, ty);
+      let filename = format!("{}_log_{}_{}.bin", output_prefix, tx, ty);
       let fw = File::create(filename).unwrap();
       let mut w = BufWriter::new(fw);
       write_record(&Header{
         count: tiles[idx].count,
         start: tiles[idx].start,
         size: tiles[idx].size,
+        start_x: tiles[idx].start_x,
+        start_y: tiles[idx].start_y,
         version: 0x6969,
       }, &mut w).unwrap();
       for p in tiles[idx].placements.iter() {
