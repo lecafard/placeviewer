@@ -8,7 +8,7 @@ use std::time::Instant;
 use tokio::runtime::Runtime;
 
 use crate::store::config;
-use crate::store::Dataset;
+use crate::store::config::{Dataset, Tile};
 
 #[derive(Parser)]
 pub struct ServeCommand {
@@ -36,9 +36,7 @@ impl ServeCommand {
         panic!("Dataset {} already exists in map", serialized_dataset.name);
       }
       let dataset: Dataset = serialized_dataset.load();
-      generate_images(&dataset);
-
-      // datasets.insert(serialized_dataset.name.clone(), dataset);
+      datasets.insert(serialized_dataset.name.clone(), dataset);
     }
 
     // create http server

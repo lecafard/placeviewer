@@ -1,13 +1,16 @@
+use std::marker::PhantomData;
+
 pub trait Record {}
 
 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub struct Placement {
+pub struct Placement<T> {
   pub ts: u32,
   pub uid: u32,
   pub x: u16,
   pub y: u16,
   pub color: u8,
   pub isblk: bool,
+  pub marker: PhantomData<*const T>
 }
 
 #[derive(Debug)]
@@ -20,6 +23,6 @@ pub struct TileHeader {
   pub count: u32,
 }
 
-impl Record for Placement {}
+impl<T> Record for Placement<T> {}
 impl Record for TileHeader {}
 

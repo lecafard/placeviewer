@@ -1,12 +1,11 @@
 use log::debug;
-use memmap::MmapOptions;
+use memmap::{Mmap, MmapOptions};
 use serde::Deserialize;
-use std::fs::File;
 use std::{mem, ptr, slice};
-use std::sync::Arc;
+use std::fs::File;
+use std::marker::PhantomData;
 
 use crate::models::record::{TileHeader, Placement};
-use crate::store::{Dataset, Tile};
 
 #[derive(Debug, Deserialize)]
 pub struct Root {
@@ -22,6 +21,26 @@ pub struct SerializedDataset {
   pub size_y: u16,
   pub size_tile: u16,
   pub interval: u32
+}
+
+#[derive(Debug)]
+pub struct Dataset {
+  pub name: String,
+  pub palette: Vec<u8>,
+  pub size_x: u16,
+  pub size_y: u16,
+  pub size_tile: u16,
+  pub tiles: Vec<Tile>,
+}
+
+#[derive(Debug)]
+pub struct Tile {
+  pub start: u64,
+  pub count: u32,
+  pub start_x: u16,
+  pub start_y: u16,
+  pub size: u16,
+  mmap: Mmap,
 }
 
 impl SerializedDataset {
@@ -60,16 +79,28 @@ impl SerializedDataset {
         panic!("header size does not match tile size");
       }
 
+
       dataset.tiles.push(Tile{
         start: header.start,
         count: header.count,
         start_x: header.start_x,
         start_y: header.start_y,
         size: header.size,
-        mmap: Arc::new(mmap),
+        mmap: mmap,
       });
     }
 
     return dataset;
+  }
+}
+
+impl Tile {
+  pub fn placements(&self) -> &[Placement<Tile>] {
+    return unsafe {
+      slice::from_raw_parts(
+        self.mmap.as_ptr().offset(mem::size_of::<TileHeader>() as isize) as *const _,
+        self.count as usize
+      )
+    };
   }
 }

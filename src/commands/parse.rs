@@ -4,6 +4,7 @@ use serde::Deserialize;
 use std::{mem, slice};
 use std::io::{self, BufWriter, Write};
 use std::fs::File;
+use std::marker::PhantomData;
 
 use crate::models::record::{TileHeader, Placement, Record};
 
@@ -63,7 +64,7 @@ fn read_csv(
   let tiles_x = size_x / size_tile;
   let tiles_y = size_y / size_tile;
   let mut tiles: Vec<TileHeader> = Vec::with_capacity((tiles_x * tiles_y) as usize);
-  let mut placements: Vec<Vec<Placement>> = Vec::with_capacity((tiles_x * tiles_y) as usize);
+  let mut placements: Vec<Vec<Placement<TileHeader>>> = Vec::with_capacity((tiles_x * tiles_y) as usize);
 
   for ty in 0..tiles_y {
     for tx in 0..tiles_x {
@@ -126,6 +127,7 @@ fn read_csv(
             y: y - tile_y * size_tile,
             color: record.color,
             isblk: true,
+            marker: PhantomData,
           };
           placements[(tile_y * tiles_x + tile_x) as usize].push(placement);
         }
@@ -144,6 +146,7 @@ fn read_csv(
         y: record.y_coordinate - tile_y * size_tile,
         color: record.color,
         isblk: false,
+        marker: PhantomData,
       };
       placements[(tile_y * tiles_x + tile_x) as usize].push(placement);
     }
