@@ -1,14 +1,18 @@
-use actix_web::{get, post, App, HttpServer, HttpResponse, Responder};
+use actix_web::{web, get, post, App, HttpServer, HttpResponse, Responder};
+use actix_web::http::header::ContentType;
+use actix_web::http::StatusCode;
 use clap::Parser;
-use log::{info};
+use log::{debug, info};
 use std::collections::HashMap;
-use std::fs::{File, read_to_string};
-use std::io::BufWriter;
+use std::sync::Arc;
+use std::fs::read_to_string;
 use std::time::Instant;
 use tokio::runtime::Runtime;
 
 use crate::store::config;
 use crate::store::config::{Dataset, Tile};
+
+const INITIAL_IMAGE_SIZE: usize = 8192;
 
 #[derive(Parser)]
 pub struct ServeCommand {
@@ -41,51 +45,69 @@ impl ServeCommand {
 
     // create http server
     let rt = Runtime::new().unwrap();
-    rt.block_on(server(&self.host, self.port))
+    rt.block_on(server(&self.host, self.port, Arc::new(datasets)))
       .unwrap();
   }
 }
 
-#[get("/")]
-async fn hello() -> impl Responder {
-  HttpResponse::Ok().body("Hello world!")
-}
-#[post("/echo")]
-async fn echo(req_body: String) -> impl Responder {
-    HttpResponse::Ok().body(req_body)
+type DatasetsMapArc = Arc<HashMap<String, Dataset>>;
+
+#[get("/tiles/{name}/ts/{tile_x}/{tile_y}/{timestamp}.png")]
+async fn get_image_by_timestamp(
+  datasets: web::Data<DatasetsMapArc>,
+  path: web::Path<(String, u16, u16, u64)>,
+) -> impl Responder {
+  let (name, tile_x, tile_y, timestamp) = path.into_inner();
+  let dataset = match datasets.get(&name) {
+    Some(d) => d,
+    None => {
+      return HttpResponse::build(StatusCode::NOT_FOUND)
+        .content_type(ContentType(mime::TEXT_PLAIN))
+        .body("dataset not found");
+    }
+  };
+
+  let tile = match dataset.get_tile(tile_x, tile_y) {
+    Some(t) => t,
+    None => {
+      return HttpResponse::build(StatusCode::NOT_FOUND)
+        .content_type(ContentType(mime::TEXT_PLAIN))
+        .body("tile not found");
+    }
+  };
+  
+
+  let mut imgdata: Vec<u8> = Vec::with_capacity(INITIAL_IMAGE_SIZE);
+
+  write_image(tile, &dataset.palette, &mut imgdata);
+  HttpResponse::Ok()
+    .content_type(ContentType(mime::IMAGE_PNG))
+    .body(imgdata)
 }
 
-
-async fn server(host: &str, port: u16) -> std::io::Result<()> {
+async fn server(host: &str, port: u16, datasets: Arc<HashMap<String, Dataset>>) -> std::io::Result<()> {
   info!("Starting server on {}:{}", host, port);
-  HttpServer::new(|| {
+  HttpServer::new(move || {
       App::new()
-          .service(hello)
-          .service(echo)
+        .app_data(web::Data::new(datasets.clone()))
+        .service(get_image_by_timestamp)
   })
   .bind((host, port))?
   .run()
   .await
 }
 
-fn generate_images(dataset: &Dataset) {
-  for (i, tile) in dataset.tiles.iter().enumerate() {
-
-    let now = Instant::now();
-    let mut data: Vec<u8> = vec![0; tile.size as usize * tile.size as usize];
-    for p in tile.placements().iter() {
-      let i = p.x as usize + (p.y as usize * dataset.size_tile as usize);
-      data[i] = p.color;
-    }
-
-    println!("Frame took {:?} seconds to render", now.elapsed());
-
-    let file = File::create(format!("data/pics/{}_{}.png", dataset.name, i)).unwrap();
-    let w = BufWriter::new(file);
-    let mut encoder = png::Encoder::new(w, dataset.size_tile as u32, dataset.size_tile as u32);
-    encoder.set_color(png::ColorType::Indexed);
-    encoder.set_palette(&dataset.palette);
-    let mut writer = encoder.write_header().unwrap();
-    writer.write_image_data(&data).unwrap();
+fn write_image<T: std::io::Write>(tile: &Tile, palette: &[u8], w: T) {
+  let now = Instant::now();
+  let mut data: Vec<u8> = vec![0; tile.size as usize * tile.size as usize];
+  for p in tile.placements().iter() {
+    let i = p.x as usize + (p.y as usize * tile.size as usize);
+    data[i] = p.color;
   }
+  let mut encoder = png::Encoder::new(w, tile.size as u32, tile.size as u32);
+  encoder.set_color(png::ColorType::Indexed);
+  encoder.set_palette(palette);
+  let mut writer = encoder.write_header().unwrap();
+  writer.write_image_data(&data).unwrap();
+  debug!("Tile took {:?} seconds to render", now.elapsed());
 }

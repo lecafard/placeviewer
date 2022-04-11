@@ -3,7 +3,6 @@ use memmap::{Mmap, MmapOptions};
 use serde::Deserialize;
 use std::{mem, ptr, slice};
 use std::fs::File;
-use std::marker::PhantomData;
 
 use crate::models::record::{TileHeader, Placement};
 
@@ -91,6 +90,17 @@ impl SerializedDataset {
     }
 
     return dataset;
+  }
+}
+
+impl Dataset {
+  pub fn get_tile(&self, x: u16, y: u16) -> Option<&Tile> {
+    let sx = self.size_x / self.size_tile;
+    let sy = self.size_y / self.size_tile;
+    if x >= sx || y >= sy {
+      return None
+    }
+    return Some(&self.tiles[x as usize + y as usize * sx as usize]);
   }
 }
 

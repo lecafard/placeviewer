@@ -907,6 +907,7 @@ dependencies = [
  "env_logger",
  "log",
  "memmap",
+ "mime",
  "png",
  "serde",
  "serde_yaml",
