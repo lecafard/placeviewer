@@ -1,16 +1,15 @@
-use actix_web::{web, get, post, App, HttpServer, HttpResponse, Responder};
+use actix_web::{get, middleware, web, App, HttpServer, HttpResponse, Responder};
 use actix_web::http::header::ContentType;
 use actix_web::http::StatusCode;
 use clap::Parser;
-use log::{debug, info};
+use log::info;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::fs::read_to_string;
-use std::time::Instant;
 use tokio::runtime::Runtime;
 
 use crate::store::config;
-use crate::store::config::{Dataset, Tile};
+use crate::store::config::Dataset;
 
 const INITIAL_IMAGE_SIZE: usize = 8192;
 
@@ -52,7 +51,7 @@ impl ServeCommand {
 
 type DatasetsMapArc = Arc<HashMap<String, Dataset>>;
 
-#[get("/tiles/{name}/ts/{tile_x}/{tile_y}/{timestamp}.png")]
+#[get("/images/{name}/tiles/{tile_x}/{tile_y}/ts/{timestamp}.png")]
 async fn get_image_by_timestamp(
   datasets: web::Data<DatasetsMapArc>,
   path: web::Path<(String, u16, u16, u64)>,
@@ -72,16 +71,27 @@ async fn get_image_by_timestamp(
     None => {
       return HttpResponse::build(StatusCode::NOT_FOUND)
         .content_type(ContentType(mime::TEXT_PLAIN))
+        .append_header(("cache-control", "max-age=2678400"))
         .body("tile not found");
     }
   };
   
 
-  let mut imgdata: Vec<u8> = Vec::with_capacity(INITIAL_IMAGE_SIZE);
+  let image = match tile.get_image_at_timestamp(timestamp) {
+    Some(t) => t,
+    None => {
+      return HttpResponse::build(StatusCode::NOT_FOUND)
+        .content_type(ContentType(mime::TEXT_PLAIN))
+        .append_header(("cache-control", "max-age=2678400"))
+        .body("image not found");
+    }
+  };
 
-  write_image(tile, &dataset.palette, &mut imgdata);
+  let mut imgdata: Vec<u8> = Vec::with_capacity(INITIAL_IMAGE_SIZE);
+  write_image(tile.size, &image, &dataset.palette, &mut imgdata);
   HttpResponse::Ok()
     .content_type(ContentType(mime::IMAGE_PNG))
+    .append_header(("cache-control", "max-age=2678400"))
     .body(imgdata)
 }
 
@@ -90,6 +100,8 @@ async fn server(host: &str, port: u16, datasets: Arc<HashMap<String, Dataset>>) 
   HttpServer::new(move || {
       App::new()
         .app_data(web::Data::new(datasets.clone()))
+        .wrap(middleware::Logger::default())
+        .wrap(middleware::DefaultHeaders::new().add(("content-type", "text/plain")))
         .service(get_image_by_timestamp)
   })
   .bind((host, port))?
@@ -97,17 +109,10 @@ async fn server(host: &str, port: u16, datasets: Arc<HashMap<String, Dataset>>) 
   .await
 }
 
-fn write_image<T: std::io::Write>(tile: &Tile, palette: &[u8], w: T) {
-  let now = Instant::now();
-  let mut data: Vec<u8> = vec![0; tile.size as usize * tile.size as usize];
-  for p in tile.placements().iter() {
-    let i = p.x as usize + (p.y as usize * tile.size as usize);
-    data[i] = p.color;
-  }
-  let mut encoder = png::Encoder::new(w, tile.size as u32, tile.size as u32);
+fn write_image<T: std::io::Write>(size: u16, data: &[u8], palette: &[u8], w: T) {
+  let mut encoder = png::Encoder::new(w, size as u32, size as u32);
   encoder.set_color(png::ColorType::Indexed);
   encoder.set_palette(palette);
   let mut writer = encoder.write_header().unwrap();
   writer.write_image_data(&data).unwrap();
-  debug!("Tile took {:?} seconds to render", now.elapsed());
 }

@@ -3,6 +3,7 @@ use memmap::{Mmap, MmapOptions};
 use serde::Deserialize;
 use std::{mem, ptr, slice};
 use std::fs::File;
+use std::time::Instant;
 
 use crate::models::record::{TileHeader, Placement};
 
@@ -112,5 +113,23 @@ impl Tile {
         self.count as usize
       )
     };
+  }
+
+  pub fn get_image_at_timestamp(&self, timestamp: u64) -> Option<Vec<u8>> {
+    let now = Instant::now();
+    let mut output: Vec<u8> = vec![0; self.size as usize * self.size as usize];
+    let placements = self.placements();
+    if (timestamp as i64 - self.start as i64) < 0 {
+      return None;
+    }
+    let idx = placements.partition_point(|p| (timestamp - self.start) as u32 > p.ts);
+    debug!("index for timestamp is {}/{}", idx, placements.len());
+
+    for p in &placements[0..idx] {  
+      output[p.x as usize + p.y as usize * self.size as usize] = p.color;
+    }
+    debug!("Tile took {:?} to render", now.elapsed());
+
+    return Some(output);
   }
 }
