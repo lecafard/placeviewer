@@ -2,7 +2,7 @@ use clap::Parser;
 use log::{error, info, warn};
 use serde::Deserialize;
 use std::{mem, slice};
-use std::io::{self, BufWriter, Write};
+use std::io::{self, BufWriter, Write, SeekFrom, prelude::*};
 use std::fs::File;
 use std::marker::PhantomData;
 
@@ -63,12 +63,13 @@ fn read_csv(
   }
   let tiles_x = size_x / size_tile;
   let tiles_y = size_y / size_tile;
-  let mut tiles: Vec<TileHeader> = Vec::with_capacity((tiles_x * tiles_y) as usize);
-  let mut placements: Vec<Vec<Placement<TileHeader>>> = Vec::with_capacity((tiles_x * tiles_y) as usize);
+  let n_tiles = tiles_x as usize * tiles_y as usize;
+  let mut headers: Vec<TileHeader> = Vec::with_capacity(n_tiles);
+  let mut handles: Vec<BufWriter<File>> = Vec::with_capacity(n_tiles);
 
   for ty in 0..tiles_y {
     for tx in 0..tiles_x {
-      tiles.push(TileHeader{
+      headers.push(TileHeader{
         size: size_tile,
         start_x: tx * size_tile,
         start_y: ty * size_tile,
@@ -76,7 +77,11 @@ fn read_csv(
         count: 0,
         version: 0x6969,
       });
-      placements.push(Vec::with_capacity(10000));
+      let filename = format!("{}_log_{}_{}.bin", output_prefix, tx, ty);
+      let fw = File::create(filename).unwrap();
+      let mut handle = BufWriter::new(fw);
+      handle.write(&[0u8; mem::size_of::<TileHeader>()]).unwrap();
+      handles.push(handle);
     }
   }
 
@@ -105,7 +110,7 @@ fn read_csv(
     if !first {
       first = true;
       t0 = record.ts;
-      for tile in tiles.iter_mut() {
+      for tile in headers.iter_mut() {
         tile.start = t0;
       }
     }
@@ -120,7 +125,7 @@ fn read_csv(
             warn!("position {},{} does not belong to a tile", x, y);
             continue;
           }
-          let placement = Placement {
+          let placement: Placement<BufWriter<File>> = Placement {
             ts: ts,
             uid: record.user_id,
             x: x - tile_x * size_tile,
@@ -129,7 +134,9 @@ fn read_csv(
             isblk: true,
             marker: PhantomData,
           };
-          placements[(tile_y * tiles_x + tile_x) as usize].push(placement);
+          let tile_idx = (tile_y * tiles_x + tile_x) as usize;
+          write_record(&placement, &mut handles[tile_idx]).unwrap();
+          headers[tile_idx].count += 1;
         }
       }
     } else {
@@ -139,7 +146,7 @@ fn read_csv(
         warn!("position {},{} does not belong to a tile", record.x_coordinate, record.y_coordinate);
         continue;
       }
-      let placement = Placement {
+      let placement: Placement<BufWriter<File>> = Placement {
         ts: ts,
         uid: record.user_id,
         x: record.x_coordinate - tile_x * size_tile,
@@ -148,29 +155,19 @@ fn read_csv(
         isblk: false,
         marker: PhantomData,
       };
-      placements[(tile_y * tiles_x + tile_x) as usize].push(placement);
+      let tile_idx = (tile_y * tiles_x + tile_x) as usize;
+      write_record(&placement, &mut handles[tile_idx]).unwrap();
+      headers[tile_idx].count += 1;
     }
     count += 1;
   }
 
   for ty in 0..tiles_y {
     for tx in 0..tiles_x {
-      let idx = (tx + ty * tiles_x) as usize;
-      tiles[idx].count = placements[idx].len() as u32;
-      let filename = format!("{}_log_{}_{}.bin", output_prefix, tx, ty);
-      let fw = File::create(filename).unwrap();
-      let mut w = BufWriter::new(fw);
-      write_record(&TileHeader{
-        count: tiles[idx].count,
-        start: tiles[idx].start,
-        size: tiles[idx].size,
-        start_x: tiles[idx].start_x,
-        start_y: tiles[idx].start_y,
-        version: 0x6969,
-      }, &mut w).unwrap();
-      for p in placements[idx].iter() {
-        write_record(p, &mut w).unwrap();
-      }
+      let tile_idx = (tx + ty * tiles_x) as usize;
+      let handle = &mut handles[tile_idx];
+      handle.seek(SeekFrom::Start(0)).unwrap();
+      write_record(&headers[tile_idx], &mut handles[tile_idx]).unwrap();
     }
   }
 

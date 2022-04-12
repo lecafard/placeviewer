@@ -1,4 +1,4 @@
-use log::debug;
+use log::{debug, info};
 use memmap::{Mmap, MmapOptions};
 use serde::Deserialize;
 use std::{mem, ptr, slice};
@@ -71,7 +71,7 @@ impl SerializedDataset {
       let file = File::open(filename).unwrap();
       let mmap = unsafe { MmapOptions::new().map(&file).unwrap() };
       let header: TileHeader = unsafe { ptr::read(mmap.as_ptr() as *const _) };
-      debug!("Header: {:?}", header);
+      info!("loading tile {} with header: {:?}", filename, header);
       if header.version != 0x6969 {
         panic!("header version is wrong");
       }
