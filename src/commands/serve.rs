@@ -12,6 +12,7 @@ use crate::store::config;
 use crate::store::config::Dataset;
 
 const INITIAL_IMAGE_SIZE: usize = 8192;
+const CACHE_CONTROL_VALUE: &str = "max-age=2678400";
 
 #[derive(Parser)]
 pub struct ServeCommand {
@@ -27,6 +28,8 @@ pub struct ServeCommand {
   #[clap(required=true)]
   config_file: String
 }
+
+type DatasetsMapArc = Arc<HashMap<String, Dataset>>;
 
 impl ServeCommand {
   pub fn execute(&self) {
@@ -49,7 +52,19 @@ impl ServeCommand {
   }
 }
 
-type DatasetsMapArc = Arc<HashMap<String, Dataset>>;
+async fn server(host: &str, port: u16, datasets: Arc<HashMap<String, Dataset>>) -> std::io::Result<()> {
+  info!("Starting server on {}:{}", host, port);
+  HttpServer::new(move || {
+      App::new()
+        .app_data(web::Data::new(datasets.clone()))
+        .wrap(middleware::Logger::default())
+        .wrap(middleware::DefaultHeaders::new().add(("content-type", "text/plain")))
+        .service(get_image_by_timestamp)
+  })
+  .bind((host, port))?
+  .run()
+  .await
+}
 
 #[get("/images/{name}/tiles/{tile_x}/{tile_y}/ts/{timestamp}.png")]
 async fn get_image_by_timestamp(
@@ -71,7 +86,7 @@ async fn get_image_by_timestamp(
     None => {
       return HttpResponse::build(StatusCode::NOT_FOUND)
         .content_type(ContentType(mime::TEXT_PLAIN))
-        .append_header(("cache-control", "max-age=2678400"))
+        .append_header(("cache-control", CACHE_CONTROL_VALUE))
         .body("tile not found");
     }
   };
@@ -82,7 +97,7 @@ async fn get_image_by_timestamp(
     None => {
       return HttpResponse::build(StatusCode::NOT_FOUND)
         .content_type(ContentType(mime::TEXT_PLAIN))
-        .append_header(("cache-control", "max-age=2678400"))
+        .append_header(("cache-control", CACHE_CONTROL_VALUE))
         .body("image not found");
     }
   };
@@ -91,22 +106,8 @@ async fn get_image_by_timestamp(
   write_image(tile.size, &image, &dataset.palette, &mut imgdata);
   HttpResponse::Ok()
     .content_type(ContentType(mime::IMAGE_PNG))
-    .append_header(("cache-control", "max-age=2678400"))
+    .append_header(("cache-control", CACHE_CONTROL_VALUE))
     .body(imgdata)
-}
-
-async fn server(host: &str, port: u16, datasets: Arc<HashMap<String, Dataset>>) -> std::io::Result<()> {
-  info!("Starting server on {}:{}", host, port);
-  HttpServer::new(move || {
-      App::new()
-        .app_data(web::Data::new(datasets.clone()))
-        .wrap(middleware::Logger::default())
-        .wrap(middleware::DefaultHeaders::new().add(("content-type", "text/plain")))
-        .service(get_image_by_timestamp)
-  })
-  .bind((host, port))?
-  .run()
-  .await
 }
 
 fn write_image<T: std::io::Write>(size: u16, data: &[u8], palette: &[u8], w: T) {

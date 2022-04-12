@@ -1,6 +1,6 @@
 use log::{debug, info};
 use memmap::{Mmap, MmapOptions};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{mem, ptr, slice};
 use std::fs::File;
 use std::time::Instant;
@@ -23,7 +23,7 @@ pub struct SerializedDataset {
   pub interval: u32
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Dataset {
   pub name: String,
   pub palette: Vec<u8>,
@@ -33,13 +33,15 @@ pub struct Dataset {
   pub tiles: Vec<Tile>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Tile {
   pub start: u64,
   pub count: u32,
   pub start_x: u16,
   pub start_y: u16,
   pub size: u16,
+  
+  #[serde(skip_serializing)]
   mmap: Mmap,
 }
 
@@ -89,7 +91,8 @@ impl SerializedDataset {
         mmap: mmap,
       });
     }
-
+    dataset.tiles.sort_by_key(|t| t.start_x);
+    dataset.tiles.sort_by_key(|t| t.start_y);
     return dataset;
   }
 }
