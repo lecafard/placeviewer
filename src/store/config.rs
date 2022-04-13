@@ -1,4 +1,5 @@
-use log::{debug, info};
+use glob::glob;
+use log::{debug, info, warn};
 use memmap::{Mmap, MmapOptions};
 use serde::{Deserialize, Serialize};
 use std::{mem, ptr, slice};
@@ -69,27 +70,38 @@ impl SerializedDataset {
       tiles: Vec::with_capacity(tiles_x * tiles_y),
     };
 
-    for filename in self.tiles.iter() {
-      let file = File::open(filename).unwrap();
-      let mmap = unsafe { MmapOptions::new().map(&file).unwrap() };
-      let header: TilePlacementHeader = unsafe { ptr::read(mmap.as_ptr() as *const _) };
-      info!("loading tile {} with header: {:?}", filename, header);
-      if header.version != 0x6969 {
-        panic!("header version is wrong");
-      }
-      if header.size != self.size_tile {
-        panic!("header size does not match tile size");
-      }
+    for pattern in self.tiles.iter() {
 
+      for entry in glob(pattern).expect("Failed to read glob pattern") {
+        let filename = match entry {
+          Ok(s) => s,
+          Err(e) => {
+            warn!("Error with glob {}", e);
+            continue
+          }
+        };
 
-      dataset.tiles.push(Tile{
-        start: header.start,
-        count: header.count,
-        start_x: header.start_x,
-        start_y: header.start_y,
-        size: header.size,
-        mmap: mmap,
-      });
+        let file = File::open(&filename).unwrap();
+        let mmap = unsafe { MmapOptions::new().map(&file).unwrap() };
+        let header: TilePlacementHeader = unsafe { ptr::read(mmap.as_ptr() as *const _) };
+        info!("loading tile {:?} with header: {:?}", &filename, header);
+        if header.version != 0x6969 {
+          panic!("header version is wrong");
+        }
+        if header.size != self.size_tile {
+          panic!("header size does not match tile size");
+        }
+  
+        dataset.tiles.push(Tile{
+          start: header.start,
+          count: header.count,
+          start_x: header.start_x,
+          start_y: header.start_y,
+          size: header.size,
+          mmap: mmap,
+        });
+
+      }
     }
     dataset.tiles.sort_by_key(|t| t.start_x);
     dataset.tiles.sort_by_key(|t| t.start_y);

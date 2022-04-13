@@ -2,10 +2,7 @@
 datasets:
   - name: "2017"
     tiles:
-      - data/cache/2017_log_0_0.bin
-      - data/cache/2017_log_0_1.bin
-      - data/cache/2017_log_1_0.bin
-      - data/cache/2017_log_1_1.bin
+      - data/cache/2017_log_*.bin
     palette:
       - 0xFFFFFF
       - 0xE4E4E4
@@ -29,22 +26,7 @@ datasets:
     interval: 500000
   - name: "2022"
     tiles:
-      - data/cache/2022_log_0_0.bin
-      - data/cache/2022_log_0_1.bin
-      - data/cache/2022_log_0_2.bin
-      - data/cache/2022_log_0_3.bin
-      - data/cache/2022_log_1_0.bin
-      - data/cache/2022_log_1_1.bin
-      - data/cache/2022_log_1_2.bin
-      - data/cache/2022_log_1_3.bin
-      - data/cache/2022_log_2_0.bin
-      - data/cache/2022_log_2_1.bin
-      - data/cache/2022_log_2_2.bin
-      - data/cache/2022_log_2_3.bin
-      - data/cache/2022_log_3_0.bin
-      - data/cache/2022_log_3_1.bin
-      - data/cache/2022_log_3_2.bin
-      - data/cache/2022_log_3_3.bin
+      - data/cache/2022_log_*.bin
     palette:
       - 0xFFFFFF
       - 0xFFF8B8
