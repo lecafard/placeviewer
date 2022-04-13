@@ -6,7 +6,7 @@ use std::io::{self, BufWriter, Write, SeekFrom, prelude::*};
 use std::fs::File;
 use std::marker::PhantomData;
 
-use crate::models::record::{TileHeader, Placement, Record};
+use crate::models::record::{TilePlacementHeader, Placement, Record};
 
 #[derive(Parser)]
 pub struct ParseCommand {
@@ -56,7 +56,7 @@ fn read_csv(
   size_y: u16,
   size_tile: u16
 ) -> Result<(), ()> {
-  info!("{}", mem::size_of::<TileHeader>());
+  info!("{}", mem::size_of::<TilePlacementHeader>());
   if size_x == 0 || size_y == 0 || size_x % size_tile != 0 || size_y % size_tile != 0 {
     error!("The size of the canvas must be divisible by the tile size");
     return Err(())
@@ -64,12 +64,12 @@ fn read_csv(
   let tiles_x = size_x / size_tile;
   let tiles_y = size_y / size_tile;
   let n_tiles = tiles_x as usize * tiles_y as usize;
-  let mut headers: Vec<TileHeader> = Vec::with_capacity(n_tiles);
+  let mut headers: Vec<TilePlacementHeader> = Vec::with_capacity(n_tiles);
   let mut handles: Vec<BufWriter<File>> = Vec::with_capacity(n_tiles);
 
   for ty in 0..tiles_y {
     for tx in 0..tiles_x {
-      headers.push(TileHeader{
+      headers.push(TilePlacementHeader{
         size: size_tile,
         start_x: tx * size_tile,
         start_y: ty * size_tile,
@@ -80,7 +80,7 @@ fn read_csv(
       let filename = format!("{}_log_{}_{}.bin", output_prefix, tx, ty);
       let fw = File::create(filename).unwrap();
       let mut handle = BufWriter::new(fw);
-      handle.write(&[0u8; mem::size_of::<TileHeader>()]).unwrap();
+      handle.write(&[0u8; mem::size_of::<TilePlacementHeader>()]).unwrap();
       handles.push(handle);
     }
   }

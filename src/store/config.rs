@@ -5,7 +5,7 @@ use std::{mem, ptr, slice};
 use std::fs::File;
 use std::time::Instant;
 
-use crate::models::record::{TileHeader, Placement};
+use crate::models::record::{TilePlacementHeader, Placement};
 
 #[derive(Debug, Deserialize)]
 pub struct Root {
@@ -72,7 +72,7 @@ impl SerializedDataset {
     for filename in self.tiles.iter() {
       let file = File::open(filename).unwrap();
       let mmap = unsafe { MmapOptions::new().map(&file).unwrap() };
-      let header: TileHeader = unsafe { ptr::read(mmap.as_ptr() as *const _) };
+      let header: TilePlacementHeader = unsafe { ptr::read(mmap.as_ptr() as *const _) };
       info!("loading tile {} with header: {:?}", filename, header);
       if header.version != 0x6969 {
         panic!("header version is wrong");
@@ -112,7 +112,7 @@ impl Tile {
   pub fn placements(&self) -> &[Placement<Tile>] {
     return unsafe {
       slice::from_raw_parts(
-        self.mmap.as_ptr().offset(mem::size_of::<TileHeader>() as isize) as *const _,
+        self.mmap.as_ptr().offset(mem::size_of::<TilePlacementHeader>() as isize) as *const _,
         self.count as usize
       )
     };

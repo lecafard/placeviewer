@@ -14,7 +14,7 @@ pub struct Placement<T> {
 }
 
 #[derive(Debug)]
-pub struct TileHeader {
+pub struct TilePlacementHeader {
   pub version: u16,
   pub size: u16,
   pub start_x: u16,
@@ -23,6 +23,19 @@ pub struct TileHeader {
   pub count: u32,
 }
 
+#[derive(Debug)]
+pub struct TileKeyframeHeader {
+  pub version: u16,
+  pub size: u16,
+  pub start_x: u16,
+  pub start_y: u16,
+  pub interval: u32,
+  pub count: u32,
+}
+
+
+
 impl<T> Record for Placement<T> {}
-impl Record for TileHeader {}
+impl Record for TileKeyframeHeader {}
+impl Record for TilePlacementHeader {}
 
