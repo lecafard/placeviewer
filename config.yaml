@@ -1,8 +1,7 @@
 
 datasets:
   - name: "2017"
-    tiles:
-      - data/cache/2017_log_*.bin
+    prefix: data/cache/2017
     palette:
       - 0xFFFFFF
       - 0xE4E4E4
@@ -23,10 +22,8 @@ datasets:
     size_x: 1000
     size_y: 1000
     size_tile: 500
-    interval: 500000
   - name: "2022"
-    tiles:
-      - data/cache/2022_log_*.bin
+    prefix: data/cache/2022
     palette:
       - 0xFFFFFF
       - 0xFFF8B8
@@ -63,4 +60,3 @@ datasets:
     size_x: 2000
     size_y: 2000
     size_tile: 500
-    interval: 500000

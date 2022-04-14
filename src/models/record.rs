@@ -1,4 +1,10 @@
+use std::io::{self, BufWriter, Write};
 use std::marker::PhantomData;
+use std::mem;
+use std::slice;
+
+pub const TILE_PLACEMENT_VERSION_ID: u16 = 0x6969;
+pub const TILE_KEYFRAME_VERSION_ID: u16 = 0x6970;
 
 pub trait Record {}
 
@@ -33,9 +39,16 @@ pub struct TileKeyframeHeader {
   pub count: u32,
 }
 
-
-
 impl<T> Record for Placement<T> {}
 impl Record for TileKeyframeHeader {}
 impl Record for TilePlacementHeader {}
 
+pub fn write_record<S: Record, T: Write>(data: &S, writer: &mut BufWriter<T>) -> io::Result<usize> {
+  unsafe {
+    let buffer = slice::from_raw_parts(
+      data as *const S as *const u8,
+      mem::size_of::<S>()
+    );
+    writer.write(buffer)
+  }
+}

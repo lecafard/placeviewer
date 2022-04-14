@@ -1,12 +1,12 @@
 use clap::Parser;
 use log::{error, info, warn};
 use serde::Deserialize;
-use std::{mem, slice};
-use std::io::{self, BufWriter, Write, SeekFrom, prelude::*};
+use std::mem;
+use std::io::{BufWriter, Write, SeekFrom, prelude::*};
 use std::fs::File;
 use std::marker::PhantomData;
 
-use crate::models::record::{TilePlacementHeader, Placement, Record};
+use crate::models::record::{TILE_PLACEMENT_VERSION_ID, TilePlacementHeader, Placement, write_record};
 
 #[derive(Parser)]
 pub struct ParseCommand {
@@ -75,7 +75,7 @@ fn read_csv(
         start_y: ty * size_tile,
         start: 0,
         count: 0,
-        version: 0x6969,
+        version: TILE_PLACEMENT_VERSION_ID,
       });
       let filename = format!("{}_log_{}_{}.bin", output_prefix, tx, ty);
       let fw = File::create(filename).unwrap();
@@ -172,14 +172,4 @@ fn read_csv(
   }
 
   Ok(())
-}
-
-fn write_record<S: Record, T: Write>(data: &S, writer: &mut BufWriter<T>) -> io::Result<usize> {
-  unsafe {
-    let buffer = slice::from_raw_parts(
-      data as *const S as *const u8,
-      mem::size_of::<S>()
-    );
-    writer.write(buffer)
-  }
 }

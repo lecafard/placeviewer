@@ -916,6 +916,7 @@ dependencies = [
  "memmap",
  "mime",
  "png",
+ "regex",
  "serde",
  "serde_yaml",
  "tokio",
