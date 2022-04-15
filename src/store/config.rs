@@ -250,7 +250,7 @@ impl Tile {
     
     let mut start = 0;
 
-    let mut output: Vec<u8> = match self.frame(idx as u32) {
+    let mut output = match self.frame(idx as u32) {
       Some((s, x)) => {
         start = s;
         x.to_vec()
