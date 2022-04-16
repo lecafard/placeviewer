@@ -245,8 +245,17 @@ impl Tile {
     if (timestamp as i64 - self.start as i64) < 0 {
       return None;
     }
-    let idx = placements.partition_point(|p| (timestamp - self.start) as u32 > p.ts);
+    
+    let ts = match u32::try_from(timestamp - self.start){
+      Ok(ts) => ts,
+      Err(_) => return None
+    };
+
+    let idx = placements.partition_point(|p| ts > p.ts);
     debug!("index for timestamp is {}/{}", idx, placements.len());
+    if idx >= placements.len() {
+      return None;
+    }
     
     let mut start = 0;
 
@@ -257,7 +266,7 @@ impl Tile {
       },
       None => vec![0; self.size as usize * self.size as usize]
     };
-    self.apply(&mut output, &placements[start..idx]);
+    self.apply(&mut output, &placements[start..=idx]);
 
     info!("Tile took {:?} to render, replayed {} placements", now.elapsed(), idx - start);
 
@@ -266,6 +275,13 @@ impl Tile {
 
   pub fn apply(&self, img: &mut Vec<u8>, placements: &[Placement<Tile>]) {
     for p in placements.iter() {  
+      img[p.x as usize + p.y as usize * self.size as usize] = p.color;
+    }
+  }
+
+
+  pub fn apply_for_user(&self, img: &mut Vec<u8>, placements: &[Placement<Tile>], user_id: u32) {
+    for p in placements.iter().filter(|p| p.uid == user_id) {  
       img[p.x as usize + p.y as usize * self.size as usize] = p.color;
     }
   }
