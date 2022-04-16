@@ -4,6 +4,7 @@ use memmap::{Mmap, MmapOptions};
 use serde::{Deserialize, Serialize};
 use std::{cmp, mem, ptr, slice};
 use std::fs::File;
+use std::iter;
 use std::result::Result;
 use std::time::Instant;
 
@@ -28,6 +29,7 @@ pub struct SerializedDataset {
 pub struct Dataset {
   pub name: String,
   pub palette: Vec<u8>,
+  pub trns_palette: Vec<u8>,
   pub size_x: u16,
   pub size_y: u16,
   pub size_tile: u16,
@@ -53,7 +55,7 @@ pub struct Tile {
 
 impl SerializedDataset {
   pub fn load(&self) -> Dataset {
-    let palette: Vec<u8> = self.palette.clone().into_iter()
+    let palette: Vec<u8> = iter::once(0xffffff).chain(self.palette.clone().into_iter())
       .flat_map(|v| {
         [
           (v >> 16 & 0xff) as u8,
@@ -62,6 +64,11 @@ impl SerializedDataset {
         ]
       })
       .collect();
+    let trns_palette: Vec<u8> = iter::once(0)
+      .chain(iter::repeat(255).take(self.palette.len()))
+      .collect();
+
+    info!("{}, {}", palette.len(), trns_palette.len());
 
     let tiles_x = (self.size_x / self.size_tile) as usize;
     let tiles_y = (self.size_y / self.size_tile) as usize;
@@ -69,6 +76,7 @@ impl SerializedDataset {
     let mut dataset = Dataset {
       name: self.name.clone(),
       palette: palette,
+      trns_palette: trns_palette,
       size_x: self.size_x,
       size_y: self.size_y,
       size_tile: self.size_tile,
@@ -122,7 +130,7 @@ impl Dataset {
   pub fn get_tile(&self, x: u16, y: u16) -> Option<&Tile> {
     let sx = self.size_x / self.size_tile;
     let sy = self.size_y / self.size_tile;
-    if x >= sx || y >= sy {
+    if x >= sx || y >= sy { 
       return None
     }
     return Some(&self.tiles[x as usize + y as usize * sx as usize]);
@@ -219,7 +227,7 @@ impl Tile {
     }
   }
 
-  pub fn frame(&self, id: u32) -> Option<(usize, &[u8])> {
+  fn frame(&self, id: u32) -> Option<(usize, Vec<u8>)> {
     match &self.mmap_frames {
       Some(mmap) => {
         let idx = cmp::min(self.frame_count - 1, id/self.frame_interval);
@@ -232,7 +240,7 @@ impl Tile {
               ) as *const _,
             size as usize
           )
-        }))
+        }.to_vec()))
       },
       None => None
     }
@@ -262,9 +270,9 @@ impl Tile {
     let mut output = match self.frame(idx as u32) {
       Some((s, x)) => {
         start = s;
-        x.to_vec()
+        x
       },
-      None => vec![0; self.size as usize * self.size as usize]
+      None => vec![1; self.size as usize * self.size as usize]
     };
     self.apply(&mut output, &placements[start..=idx]);
 
@@ -273,16 +281,24 @@ impl Tile {
     return Some(output);
   }
 
+  pub fn get_diff_for_timestamps(&self, timestamp1: u64, timestamp2: u64) -> Option<Vec<u8>> {
+    let img1 = self.get_image_at_timestamp(timestamp1)?;
+    let img2 = self.get_image_at_timestamp(timestamp2)?;
+
+    return Some(img1.iter().zip(img2.iter())
+      .map(|(a, b)| if &a == &b { 0 } else { *b })
+      .collect());
+  }
+
   pub fn apply(&self, img: &mut Vec<u8>, placements: &[Placement<Tile>]) {
     for p in placements.iter() {  
-      img[p.x as usize + p.y as usize * self.size as usize] = p.color;
+      img[p.x as usize + p.y as usize * self.size as usize] = p.color + 1;
     }
   }
 
-
   pub fn apply_for_user(&self, img: &mut Vec<u8>, placements: &[Placement<Tile>], user_id: u32) {
     for p in placements.iter().filter(|p| p.uid == user_id) {  
-      img[p.x as usize + p.y as usize * self.size as usize] = p.color;
+      img[p.x as usize + p.y as usize * self.size as usize] = p.color + 1;
     }
   }
 }

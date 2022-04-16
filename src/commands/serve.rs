@@ -60,6 +60,7 @@ async fn server(host: &str, port: u16, datasets: Arc<HashMap<String, Dataset>>) 
         .wrap(middleware::Logger::default())
         .wrap(middleware::DefaultHeaders::new().add(("content-type", "text/plain")))
         .service(get_image_by_timestamp)
+        .service(get_images_by_timestamp_diff)
   })
   .bind((host, port))?
   .run()
@@ -103,17 +104,64 @@ async fn get_image_by_timestamp(
   };
 
   let mut imgdata: Vec<u8> = Vec::with_capacity(INITIAL_IMAGE_SIZE);
-  write_image(tile.size, &image, &dataset.palette, &mut imgdata);
+  write_image(tile.size, &image, &dataset.palette, &dataset.trns_palette, &mut imgdata);
   HttpResponse::Ok()
     .content_type(ContentType(mime::IMAGE_PNG))
     .append_header(("cache-control", CACHE_CONTROL_VALUE))
     .body(imgdata)
 }
 
-fn write_image<T: std::io::Write>(size: u16, data: &[u8], palette: &[u8], w: T) {
+// TODO: remove duplicated code
+#[get("/images/{name}/tiles/{tile_x}/{tile_y}/diff-ts/{timestamp1}_{timestamp2}.png")]
+async fn get_images_by_timestamp_diff(
+  datasets: web::Data<DatasetsMapArc>,
+  path: web::Path<(String, u16, u16, u64, u64)>,
+) -> impl Responder {
+  let (name, tile_x, tile_y, timestamp1, timestamp2) = path.into_inner();
+  let dataset = match datasets.get(&name) {
+    Some(d) => d,
+    None => {
+      return HttpResponse::build(StatusCode::NOT_FOUND)
+        .content_type(ContentType(mime::TEXT_PLAIN))
+        .body("dataset not found");
+    }
+  };
+
+  let tile = match dataset.get_tile(tile_x, tile_y) {
+    Some(t) => t,
+    None => {
+      return HttpResponse::build(StatusCode::NOT_FOUND)
+        .content_type(ContentType(mime::TEXT_PLAIN))
+        .append_header(("cache-control", CACHE_CONTROL_VALUE))
+        .body("tile not found");
+    }
+  };
+  
+
+  let image = match tile.get_diff_for_timestamps(timestamp1, timestamp2) {
+    Some(t) => t,
+    None => {
+      return HttpResponse::build(StatusCode::NOT_FOUND)
+        .content_type(ContentType(mime::TEXT_PLAIN))
+        .append_header(("cache-control", CACHE_CONTROL_VALUE))
+        .body("image not found");
+    }
+  };
+
+  let mut imgdata: Vec<u8> = Vec::with_capacity(INITIAL_IMAGE_SIZE);
+  write_image(tile.size, &image, &dataset.palette, &dataset.trns_palette, &mut imgdata);
+  HttpResponse::Ok()
+    .content_type(ContentType(mime::IMAGE_PNG))
+    .append_header(("cache-control", CACHE_CONTROL_VALUE))
+    .body(imgdata)
+}
+
+
+fn write_image<T: std::io::Write>(size: u16, data: &[u8], palette: &[u8], trns_palette: &[u8],  w: T) {
   let mut encoder = png::Encoder::new(w, size as u32, size as u32);
   encoder.set_color(png::ColorType::Indexed);
   encoder.set_palette(palette);
+  encoder.set_trns(trns_palette);
   let mut writer = encoder.write_header().unwrap();
   writer.write_image_data(&data).unwrap();
 }

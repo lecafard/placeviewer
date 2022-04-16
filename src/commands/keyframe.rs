@@ -67,7 +67,7 @@ async fn export(cmd: KeyframeCommand, input: String) {
   info!("Writing out {:?} with header {:?}", out_path, header);
   write_record(&header, &mut w).unwrap();
   
-  let mut output: Vec<u8> = vec![0; tile.size as usize * tile.size as usize];
+  let mut output: Vec<u8> = vec![1; tile.size as usize * tile.size as usize];
   w.write(&output).unwrap();
   for i in tile.placements().chunks(cmd.interval as usize) {
     tile.apply(&mut output, i);
