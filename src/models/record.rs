@@ -3,8 +3,8 @@ use std::marker::PhantomData;
 use std::mem;
 use std::slice;
 
-pub const TILE_PLACEMENT_VERSION_ID: u16 = 0x6969;
-pub const TILE_KEYFRAME_VERSION_ID: u16 = 0x6970;
+pub const TILE_PLACEMENT_VERSION_ID: u16 = 0x4200;
+pub const TILE_KEYFRAME_VERSION_ID: u16 = 0x6900;
 
 pub trait Record {}
 
@@ -27,6 +27,7 @@ pub struct TilePlacementHeader {
   pub start_y: u16,
   pub start: u64,
   pub count: u32,
+  pub uid_count: u32,
 }
 
 #[derive(Debug)]

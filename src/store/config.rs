@@ -40,6 +40,7 @@ pub struct Dataset {
 pub struct Tile {
   pub start: u64,
   pub count: u32,
+  pub uid_count: u32,
   pub start_x: u16,
   pub start_y: u16,
   pub size: u16,
@@ -155,6 +156,7 @@ impl Tile {
     Ok(Tile{
       start: header.start,
       count: header.count,
+      uid_count: header.uid_count,
       start_x: header.start_x,
       start_y: header.start_y,
       size: header.size,
@@ -202,6 +204,7 @@ impl Tile {
     Ok(Tile{
       start: header_placements.start,
       count: header_placements.count,
+      uid_count: header_placements.uid_count,
       start_x: header_placements.start_x,
       start_y: header_placements.start_y,
       size: header_placements.size,
@@ -276,7 +279,7 @@ impl Tile {
     };
     self.apply(&mut output, &placements[start..=idx]);
 
-    info!("Tile took {:?} to render, replayed {} placements", now.elapsed(), idx - start);
+    debug!("Tile took {:?} to render, replayed {} placements", now.elapsed(), idx - start);
 
     return Some(output);
   }
@@ -288,6 +291,17 @@ impl Tile {
     return Some(img1.iter().zip(img2.iter())
       .map(|(a, b)| if &a == &b { 0 } else { *b })
       .collect());
+  }
+
+  pub fn get_image_for_user(&self, user_id: u32) -> Option<Vec<u8>> {
+    if user_id >= self.uid_count {
+      return None;
+    }
+    let mut img = vec![0; self.size as usize * self.size as usize];
+    for p in self.placements().iter().filter(|p| p.uid == user_id) {
+      img[p.x as usize + p.y as usize * self.size as usize] = p.color + 1;
+    }
+    return Some(img);
   }
 
   pub fn apply(&self, img: &mut Vec<u8>, placements: &[Placement<Tile>]) {

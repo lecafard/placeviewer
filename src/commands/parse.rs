@@ -2,6 +2,7 @@ use clap::Parser;
 use log::{error, info, warn};
 use serde::Deserialize;
 use std::mem;
+use std::cmp;
 use std::io::{BufWriter, Write, SeekFrom, prelude::*};
 use std::fs::File;
 use std::marker::PhantomData;
@@ -75,6 +76,7 @@ fn read_csv(
         start_y: ty * size_tile,
         start: 0,
         count: 0,
+        uid_count: 0,
         version: TILE_PLACEMENT_VERSION_ID,
       });
       let filename = format!("{}_log_{}_{}.bin", output_prefix, tx, ty);
@@ -137,6 +139,7 @@ fn read_csv(
           let tile_idx = (tile_y * tiles_x + tile_x) as usize;
           write_record(&placement, &mut handles[tile_idx]).unwrap();
           headers[tile_idx].count += 1;
+          headers[tile_idx].uid_count = cmp::max(headers[tile_idx].uid_count, record.user_id);
         }
       }
     } else {
@@ -158,6 +161,7 @@ fn read_csv(
       let tile_idx = (tile_y * tiles_x + tile_x) as usize;
       write_record(&placement, &mut handles[tile_idx]).unwrap();
       headers[tile_idx].count += 1;
+      headers[tile_idx].uid_count = cmp::max(headers[tile_idx].uid_count, record.user_id);
     }
     count += 1;
   }
