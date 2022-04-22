@@ -54,6 +54,8 @@ pub struct Tile {
   mmap_frames: Option<Mmap>,
 }
 
+pub type FrameData = Vec<u32>;
+
 impl SerializedDataset {
   pub fn load(&self) -> Dataset {
     let palette: Vec<u8> = iter::once(0xffffff).chain(self.palette.clone().into_iter())
@@ -68,8 +70,6 @@ impl SerializedDataset {
     let trns_palette: Vec<u8> = iter::once(0)
       .chain(iter::repeat(255).take(self.palette.len()))
       .collect();
-
-    info!("{}, {}", palette.len(), trns_palette.len());
 
     let tiles_x = (self.size_x / self.size_tile) as usize;
     let tiles_y = (self.size_y / self.size_tile) as usize;
@@ -230,7 +230,7 @@ impl Tile {
     }
   }
 
-  fn frame(&self, id: u32) -> Option<(usize, Vec<u8>)> {
+  fn frame(&self, id: u32) -> Option<(usize, FrameData)> {
     match &self.mmap_frames {
       Some(mmap) => {
         let idx = cmp::min(self.frame_count - 1, id/self.frame_interval);
@@ -239,7 +239,7 @@ impl Tile {
           slice::from_raw_parts(
             mmap.as_ptr()
               .offset(
-                mem::size_of::<TileKeyframeHeader>() as isize + idx as isize * size as isize
+                mem::size_of::<TileKeyframeHeader>() as isize + idx as isize * (size * 4) as isize
               ) as *const _,
             size as usize
           )
@@ -249,7 +249,7 @@ impl Tile {
     }
   }
 
-  pub fn get_image_at_timestamp(&self, timestamp: u64) -> Option<Vec<u8>> {
+  pub fn get_image_at_timestamp(&self, timestamp: u64) -> Option<FrameData> {
     let now = Instant::now();
 
     let placements = self.placements();
@@ -259,7 +259,7 @@ impl Tile {
     
     let ts = match u32::try_from(timestamp - self.start){
       Ok(ts) => ts,
-      Err(_) => return None
+      Err(_) => placements[placements.len() - 1].ts // default to last pixel
     };
 
     let idx = placements.partition_point(|p| ts > p.ts);
@@ -269,7 +269,6 @@ impl Tile {
     }
     
     let mut start = 0;
-
     let mut output = match self.frame(idx as u32) {
       Some((s, x)) => {
         start = s;
@@ -284,7 +283,7 @@ impl Tile {
     return Some(output);
   }
 
-  pub fn get_diff_for_timestamps(&self, timestamp1: u64, timestamp2: u64) -> Option<Vec<u8>> {
+  pub fn get_diff_for_timestamps(&self, timestamp1: u64, timestamp2: u64) -> Option<FrameData> {
     let img1 = self.get_image_at_timestamp(timestamp1)?;
     let img2 = self.get_image_at_timestamp(timestamp2)?;
 
@@ -293,26 +292,21 @@ impl Tile {
       .collect());
   }
 
-  pub fn get_image_for_user(&self, user_id: u32) -> Option<Vec<u8>> {
+  pub fn get_image_for_user(&self, user_id: u32) -> Option<FrameData> {
     if user_id >= self.uid_count {
       return None;
     }
-    let mut img = vec![0; self.size as usize * self.size as usize];
+    let mut img = vec![0u32; self.size as usize * self.size as usize];
     for p in self.placements().iter().filter(|p| p.uid == user_id) {
-      img[p.x as usize + p.y as usize * self.size as usize] = p.color + 1;
+      img[p.x as usize + p.y as usize * self.size as usize] = (p.uid << 8) + (p.color + 1) as u32;
     }
     return Some(img);
   }
 
-  pub fn apply(&self, img: &mut Vec<u8>, placements: &[Placement<Tile>]) {
-    for p in placements.iter() {  
-      img[p.x as usize + p.y as usize * self.size as usize] = p.color + 1;
-    }
-  }
 
-  pub fn apply_for_user(&self, img: &mut Vec<u8>, placements: &[Placement<Tile>], user_id: u32) {
-    for p in placements.iter().filter(|p| p.uid == user_id) {  
-      img[p.x as usize + p.y as usize * self.size as usize] = p.color + 1;
+  pub fn apply(&self, img: &mut FrameData, placements: &[Placement<Tile>]) {
+    for p in placements.iter() {  
+      img[p.x as usize + p.y as usize * self.size as usize] = (p.uid << 8) + (p.color + 1) as u32;
     }
   }
 }

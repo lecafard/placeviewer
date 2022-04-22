@@ -4,7 +4,6 @@ use std::io::BufWriter;
 use std::io::prelude::*;
 use std::fs::File;
 use std::path::Path;
-use std::thread::sleep_ms;
 use regex::Regex;
 use tokio::runtime::Runtime;
 
@@ -29,8 +28,6 @@ impl KeyframeCommand {
     for input in self.inputs.iter() {
       rt.spawn(export(self.clone(), String::from(input)));
     }
-    // TODO: fix this hack
-    sleep_ms(10000);
   }
 }
 
@@ -67,10 +64,10 @@ async fn export(cmd: KeyframeCommand, input: String) {
   info!("Writing out {:?} with header {:?}", out_path, header);
   write_record(&header, &mut w).unwrap();
   
-  let mut output: Vec<u8> = vec![1; tile.size as usize * tile.size as usize];
-  w.write(&output).unwrap();
+  let mut output: Vec<u32> = vec![1; tile.size as usize * tile.size as usize];
+  w.write(&(output.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>())).unwrap();
   for i in tile.placements().chunks(cmd.interval as usize) {
     tile.apply(&mut output, i);
-    w.write(&output).unwrap();
+    w.write(&(output.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>())).unwrap();
   }
 }

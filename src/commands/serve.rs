@@ -1,6 +1,5 @@
 use actix_web::{error, get, middleware, web, App, HttpServer, HttpResponse, Responder};
 use actix_web::http::header::ContentType;
-use actix_web::http::StatusCode;
 use clap::Parser;
 use log::info;
 use std::collections::HashMap;
@@ -65,6 +64,7 @@ async fn server(host: &str, port: u16, datasets: Arc<HashMap<String, Dataset>>) 
         .service(get_image_by_timestamp)
         .service(get_image_by_timestamp_diff)
         .service(get_image_by_user_id)
+        .service(get_image_by_user_id_remainder)
   })
   .bind((host, port))?
   .run()
@@ -79,8 +79,8 @@ async fn get_image_by_timestamp(
   let (name, tile_x, tile_y, timestamp) = path.into_inner();
   let (dataset, tile) = get_tile(&datasets, name, tile_x, tile_y).await?;
 
-  let image = match tile.get_image_at_timestamp(timestamp) {
-    Some(t) => t,
+  let image: Vec<u8> = match tile.get_image_at_timestamp(timestamp) {
+    Some(t) => t.iter().map(|v| (v & 0xff) as u8).collect(),
     None => return Err(error::ErrorNotFound("timestamp not found"))
   };
   let mut imgdata: Vec<u8> = Vec::with_capacity(INITIAL_IMAGE_SIZE);
@@ -99,9 +99,29 @@ async fn get_image_by_timestamp_diff(
   let (name, tile_x, tile_y, timestamp1, timestamp2) = path.into_inner();
   let (dataset, tile) = get_tile(&datasets, name, tile_x, tile_y).await?;
 
-  let image = match tile.get_diff_for_timestamps(timestamp1, timestamp2) {
-    Some(t) => t,
+  let image: Vec<u8> = match tile.get_diff_for_timestamps(timestamp1, timestamp2) {
+    Some(t) => t.iter().map(|v| (v & 0xff) as u8).collect(),
     None => return Err(error::ErrorNotFound("both timestamps not found"))
+  };
+  let mut imgdata: Vec<u8> = Vec::with_capacity(INITIAL_IMAGE_SIZE);
+  write_image(tile.size, &image, &dataset.palette, &dataset.trns_palette, &mut imgdata);
+  Ok(HttpResponse::Ok()
+    .content_type(ContentType(mime::IMAGE_PNG))
+    .append_header(("cache-control", CACHE_CONTROL_VALUE))
+    .body(imgdata))
+}
+
+#[get("/images/{name}/tiles/{tile_x}/{tile_y}/uid-rem/{user_id}_{timestamp}.png")]
+async fn get_image_by_user_id_remainder(
+  datasets: web::Data<DatasetsMapArc>,
+  path: web::Path<(String, u16, u16, u32, u64)>,
+) -> Result<impl Responder, error::Error> {
+  let (name, tile_x, tile_y, user_id, timestamp) = path.into_inner();
+  let (dataset, tile) = get_tile(&datasets, name, tile_x, tile_y).await?;
+
+  let image: Vec<u8> = match tile.get_image_at_timestamp(timestamp) {
+    Some(t) => t.iter().map(|v| if (v >> 8) == user_id { v & 0xff } else { 0 } as u8).collect(),
+    None => return Err(error::ErrorNotFound("timestamp not found"))
   };
   let mut imgdata: Vec<u8> = Vec::with_capacity(INITIAL_IMAGE_SIZE);
   write_image(tile.size, &image, &dataset.palette, &dataset.trns_palette, &mut imgdata);
@@ -119,8 +139,8 @@ async fn get_image_by_user_id(
   let (name, tile_x, tile_y, user_id) = path.into_inner();
   let (dataset, tile) = get_tile(&datasets, name, tile_x, tile_y).await?;
 
-  let image = match tile.get_image_for_user(user_id) {
-    Some(t) => t,
+  let image: Vec<u8> = match tile.get_image_for_user(user_id) {
+    Some(t) => t.iter().map(|v| (v & 0xff) as u8).collect(),
     None => return Err(error::ErrorNotFound("user id not found"))
   };
   let mut imgdata: Vec<u8> = Vec::with_capacity(INITIAL_IMAGE_SIZE);

@@ -21,7 +21,7 @@ datasets:
       - 0x820080
     size_x: 1000
     size_y: 1000
-    size_tile: 1000
+    size_tile: 500
   - name: "2022"
     prefix: data/cache/2022
     palette:
@@ -59,4 +59,4 @@ datasets:
       - 0x000000
     size_x: 2000
     size_y: 2000
-    size_tile: 1000
+    size_tile: 500
