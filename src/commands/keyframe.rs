@@ -4,10 +4,12 @@ use std::io::BufWriter;
 use std::io::prelude::*;
 use std::fs::File;
 use std::path::Path;
+use std::thread::sleep;
+use std::time::Duration;
 use regex::Regex;
 use tokio::runtime::Runtime;
 
-use crate::store::config::Tile;
+use crate::store::tile::Tile;
 use crate::models::record::{TileKeyframeHeader, write_record, TILE_KEYFRAME_VERSION_ID};
 
 const REGEX_LOG: &str = r"^([A-Za-z0-9-]+)_log_([0-9]+_[0-9]+).bin$";
@@ -28,9 +30,9 @@ impl KeyframeCommand {
     for input in self.inputs.iter() {
       rt.spawn(export(self.clone(), String::from(input)));
     }
+    sleep(Duration::from_secs(1)); // remove this hack
   }
 }
-
 
 async fn export(cmd: KeyframeCommand, input: String) {
   let re = Regex::new(REGEX_LOG).unwrap();

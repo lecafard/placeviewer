@@ -5,7 +5,6 @@ use std::mem;
 use std::cmp;
 use std::io::{BufWriter, Write, SeekFrom, prelude::*};
 use std::fs::File;
-use std::marker::PhantomData;
 
 use crate::models::record::{TILE_PLACEMENT_VERSION_ID, TilePlacementHeader, Placement, write_record};
 
@@ -127,14 +126,13 @@ fn read_csv(
             warn!("position {},{} does not belong to a tile", x, y);
             continue;
           }
-          let placement: Placement<BufWriter<File>> = Placement {
+          let placement = Placement {
             ts: ts,
             uid: record.user_id,
             x: x - tile_x * size_tile,
             y: y - tile_y * size_tile,
             color: record.color,
             isblk: true,
-            marker: PhantomData,
           };
           let tile_idx = (tile_y * tiles_x + tile_x) as usize;
           write_record(&placement, &mut handles[tile_idx]).unwrap();
@@ -149,14 +147,13 @@ fn read_csv(
         warn!("position {},{} does not belong to a tile", record.x_coordinate, record.y_coordinate);
         continue;
       }
-      let placement: Placement<BufWriter<File>> = Placement {
+      let placement = Placement {
         ts: ts,
         uid: record.user_id,
         x: record.x_coordinate - tile_x * size_tile,
         y: record.y_coordinate - tile_y * size_tile,
         color: record.color,
         isblk: false,
-        marker: PhantomData,
       };
       let tile_idx = (tile_y * tiles_x + tile_x) as usize;
       write_record(&placement, &mut handles[tile_idx]).unwrap();

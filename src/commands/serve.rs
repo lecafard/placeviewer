@@ -7,8 +7,9 @@ use std::sync::Arc;
 use std::fs::read_to_string;
 use tokio::runtime::Runtime;
 
-use crate::store::config;
-use crate::store::config::{Dataset, Tile};
+use crate::store::config::ConfigRoot;
+use crate::store::dataset::Dataset;
+use crate::store::tile::Tile;
 
 const INITIAL_IMAGE_SIZE: usize = 8192;
 const CACHE_CONTROL_VALUE: &str = "max-age=2678400";
@@ -33,7 +34,7 @@ type DatasetsMapArc = Arc<HashMap<String, Dataset>>;
 impl ServeCommand {
   pub fn execute(&self) {
     let config_str = read_to_string(&self.config_file).unwrap();
-    let config: config::Root = serde_yaml::from_str(&config_str).unwrap();
+    let config: ConfigRoot = serde_yaml::from_str(&config_str).unwrap();
     let mut datasets: HashMap<String, Dataset> = HashMap::new();
     
     for serialized_dataset in config.datasets.iter() {

@@ -1,5 +1,4 @@
 use std::io::{self, BufWriter, Write};
-use std::marker::PhantomData;
 use std::mem;
 use std::slice;
 
@@ -9,14 +8,13 @@ pub const TILE_KEYFRAME_VERSION_ID: u16 = 0x6900;
 pub trait Record {}
 
 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub struct Placement<T> {
+pub struct Placement {
   pub ts: u32,
   pub uid: u32,
   pub x: u16,
   pub y: u16,
   pub color: u8,
-  pub isblk: bool,
-  pub marker: PhantomData<*const T>
+  pub isblk: bool
 }
 
 #[derive(Debug)]
@@ -40,7 +38,7 @@ pub struct TileKeyframeHeader {
   pub count: u32,
 }
 
-impl<T> Record for Placement<T> {}
+impl Record for Placement {}
 impl Record for TileKeyframeHeader {}
 impl Record for TilePlacementHeader {}
 
